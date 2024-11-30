@@ -9,4 +9,6 @@ Soteria is an automated tool for testing software and creating WDAC policies aro
 - [ ] Allow for splitting the results of tests into subfolders for ease of searching / multiple loads
 - [ ] Build out Devops and Github workflows
 - [ ] Code cleanup
+- [ ] Automated creation of WDAC policies
+- [ ] Automation to push policy into Intune
 
