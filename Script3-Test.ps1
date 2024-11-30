@@ -1,9 +1,11 @@
 # Variables
 $InstallerInfoPath = "C:\SandboxTest\InstallerInfo.json"
-$VirusTotalAPIKey = "<YOUR API KEY HERE>"
+$VirusTotalAPIKey = "{YOUR API KEY HERE}"
 $VirusTotalResultPath = "C:\SandboxTest\VirusTotalCheck.txt"
 $HashOutputPath = "C:\SandboxTest\ApplicationHashes.txt"
 $MonitoringLogs = "C:\SandboxTest\Monitoring.txt"
+$filePath = "C:\SandboxTest\file.txt"
+$filecontent = "Application Testing Underway!"
 
 # Load Installer Info
 if (-not (Test-Path $InstallerInfoPath)) {
@@ -53,7 +55,8 @@ if (-not $PrimaryExecutable) {
 Write-Host "Primary application executable: $($PrimaryExecutable.FullName)"
 
 # Open Notepad with a message for the user (before launching Task Manager and application)
-Start-Process -FilePath "notepad.exe" -ArgumentList "Application testing underway!" -NoNewWindow
+Set-Content -Path $filePath -Value $content
+Start-Process "notepad.exe" -ArgumentList $filePath
 Start-Sleep -Seconds 1 # Ensure notepad has time to open
 
 # Open Task Manager
@@ -103,21 +106,59 @@ Set-Content -Path $HashOutputPath -Value $hashesString
 Write-Host "SHA1 hashes from '$folderPath' and all subfolders have been successfully exported as a comma-separated list." -ForegroundColor Green
 
 # VirusTotal File Upload
-Write-Host "Uploading installation file to VirusTotal..."
+# Load Installer Info
+if (-not (Test-Path $InstallerInfoPath)) {
+    Write-Host "Installer info file not found: $InstallerInfoPath" -ForegroundColor Red
+    exit
+}
+
+$InstallerInfo = Get-Content -Path $InstallerInfoPath | ConvertFrom-Json
+
+# Ensure the installer file exists
 if (-not (Test-Path $InstallerInfo.InstallerPath)) {
     Write-Host "Installer file not found. Skipping VirusTotal scan." -ForegroundColor Yellow
+    # Write error to VirusTotal result path
+    "ERROR: An error occurred whilst attempting to upload file to Virus Total" | Out-File -FilePath $VirusTotalResultPath
 } else {
-    $FileBytes = [System.IO.File]::ReadAllBytes($InstallerInfo.InstallerPath)
-    $Base64File = [Convert]::ToBase64String($FileBytes)
+    try {
+        # Prepare the headers for the request
+        $headers = @{
+            "accept" = "application/json"
+            "x-apikey" = $VirusTotalAPIKey
+            "content-type" = "multipart/form-data; boundary=---011000010111000001101001"
+        }
 
-    $Headers = @{
-        "x-apikey" = $VirusTotalAPIKey
+        # Prepare the body for the file upload, which includes the multipart boundary
+        $Boundary = "---011000010111000001101001"
+        $FilePath = $InstallerInfo.InstallerPath
+        $FileContent = [System.IO.File]::ReadAllBytes($FilePath)
+
+        # Create the multipart form-data body
+        $Body = @"
+$Boundary
+Content-Disposition: form-data; name="file"; filename="$(Split-Path -Leaf $FilePath)"
+Content-Type: application/octet-stream
+
+$( [System.Text.Encoding]::ASCII.GetString($FileContent) )
+
+$Boundary--
+"@
+
+        # Send the POST request to VirusTotal
+        $response = Invoke-WebRequest -Uri 'https://www.virustotal.com/api/v3/files' -Method POST -Headers $headers -Body $Body
+
+        # Check for successful response and write to the result file
+        if ($response.StatusCode -eq 200) {
+            $response.Content | ConvertFrom-Json | Out-File -FilePath $VirusTotalResultPath
+        } else {
+            Write-Host "Error: $($response.StatusCode) - $($response.StatusDescription)" -ForegroundColor Red
+            "ERROR: An error occurred whilst attempting to upload file to Virus Total. Response: $($response.StatusCode) - $($response.StatusDescription)" | Out-File -FilePath $VirusTotalResultPath
+        }
+
+    } catch {
+        # If an error occurs, write error details to VirusTotal result path
+        "ERROR: An error occurred whilst attempting to upload file to Virus Total. Error details: $($_.Exception.Message)" | Out-File -FilePath $VirusTotalResultPath
     }
-    $Body = @{
-        file = $Base64File
-    }
-    #$Response = Invoke-RestMethod -Uri "https://www.virustotal.com/api/v3/files" -Method POST -Headers $Headers -Body $Body
-    #$Response | ConvertTo-Json -Depth 10 | Out-File -FilePath $VirusTotalResultPath -Append
 }
 
 Write-Host "VirusTotal scan results saved to: $VirusTotalResultPath"
