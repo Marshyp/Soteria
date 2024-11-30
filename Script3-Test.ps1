@@ -5,7 +5,7 @@ $VirusTotalResultPath = "C:\SandboxTest\VirusTotalCheck.txt"
 $HashOutputPath = "C:\SandboxTest\ApplicationHashes.txt"
 $MonitoringLogs = "C:\SandboxTest\Monitoring.txt"
 $filePath = "C:\SandboxTest\file.txt"
-$filecontent = "Application Testing Underway!"
+$fileContent = "Application Testing Underway!"
 
 # Load Installer Info
 if (-not (Test-Path $InstallerInfoPath)) {
@@ -55,7 +55,7 @@ if (-not $PrimaryExecutable) {
 Write-Host "Primary application executable: $($PrimaryExecutable.FullName)"
 
 # Open Notepad with a message for the user (before launching Task Manager and application)
-Set-Content -Path $filePath -Value $content
+Set-Content -Path $filePath -Value $fileContent
 Start-Process "notepad.exe" -ArgumentList $filePath
 Start-Sleep -Seconds 1 # Ensure notepad has time to open
 
