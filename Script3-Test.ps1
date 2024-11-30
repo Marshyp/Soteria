@@ -66,7 +66,7 @@ Start-Sleep -Seconds 2 # Give Task Manager a moment to open
 # Start application for testing
 Write-Host "Starting application for testing..."
 $Process = Start-Process -FilePath $PrimaryExecutable.FullName -PassThru
-Start-Sleep -Seconds 120 # Allow application to run for 2 minutes
+Start-Sleep -Seconds 10 # Allow application to run for 2 minutes
 
 # Monitor Process (CPU, Memory, Threads)
 Write-Host "Monitoring application performance..."
@@ -105,7 +105,7 @@ $hashesString = $hashes -join ','
 Set-Content -Path $HashOutputPath -Value $hashesString
 Write-Host "SHA1 hashes from '$folderPath' and all subfolders have been successfully exported as a comma-separated list." -ForegroundColor Green
 
-# VirusTotal File Upload
+# VirusTotal File Upload - SHA1 Hash Upload
 # Load Installer Info
 if (-not (Test-Path $InstallerInfoPath)) {
     Write-Host "Installer info file not found: $InstallerInfoPath" -ForegroundColor Red
@@ -118,46 +118,38 @@ $InstallerInfo = Get-Content -Path $InstallerInfoPath | ConvertFrom-Json
 if (-not (Test-Path $InstallerInfo.InstallerPath)) {
     Write-Host "Installer file not found. Skipping VirusTotal scan." -ForegroundColor Yellow
     # Write error to VirusTotal result path
-    "ERROR: An error occurred whilst attempting to upload file to Virus Total" | Out-File -FilePath $VirusTotalResultPath
+    "ERROR: Installer file not found." | Out-File -FilePath $VirusTotalResultPath
 } else {
     try {
+        # Get the SHA1 hash of the installer file
+        $FilePath = $InstallerInfo.InstallerPath
+        $sha1Hash = (Get-FileHash -Path $FilePath -Algorithm SHA1).Hash
+
         # Prepare the headers for the request
         $headers = @{
             "accept" = "application/json"
             "x-apikey" = $VirusTotalAPIKey
-            "content-type" = "multipart/form-data; boundary=---011000010111000001101001"
         }
 
-        # Prepare the body for the file upload, which includes the multipart boundary
-        $Boundary = "---011000010111000001101001"
-        $FilePath = $InstallerInfo.InstallerPath
-        $FileContent = [System.IO.File]::ReadAllBytes($FilePath)
+        # Send the GET request to VirusTotal to check the file by SHA1 hash
+        $url = "https://www.virustotal.com/api/v3/files/$sha1Hash"
+        $response = Invoke-WebRequest -Uri $url -Method GET -Headers $headers
 
-        # Create the multipart form-data body
-        $Body = @"
-$Boundary
-Content-Disposition: form-data; name="file"; filename="$(Split-Path -Leaf $FilePath)"
-Content-Type: application/octet-stream
-
-$( [System.Text.Encoding]::ASCII.GetString($FileContent) )
-
-$Boundary--
-"@
-
-        # Send the POST request to VirusTotal
-        $response = Invoke-WebRequest -Uri 'https://www.virustotal.com/api/v3/files' -Method POST -Headers $headers -Body $Body
-
-        # Check for successful response and write to the result file
+       # Check for successful response
         if ($response.StatusCode -eq 200) {
-            $response.Content | ConvertFrom-Json | Out-File -FilePath $VirusTotalResultPath
+            # Get the full response content as text (to avoid truncation)
+            $responseContent = $response.Content | Out-String
+
+            # Convert the response content to JSON and save it to the result path
+            $responseContent | Out-File -FilePath $VirusTotalResultPath
         } else {
             Write-Host "Error: $($response.StatusCode) - $($response.StatusDescription)" -ForegroundColor Red
-            "ERROR: An error occurred whilst attempting to upload file to Virus Total. Response: $($response.StatusCode) - $($response.StatusDescription)" | Out-File -FilePath $VirusTotalResultPath
+            "ERROR: An error occurred while fetching the VirusTotal result. Response: $($response.StatusCode) - $($response.StatusDescription)" | Out-File -FilePath $VirusTotalResultPath
         }
 
     } catch {
         # If an error occurs, write error details to VirusTotal result path
-        "ERROR: An error occurred whilst attempting to upload file to Virus Total. Error details: $($_.Exception.Message)" | Out-File -FilePath $VirusTotalResultPath
+        "ERROR: An error occurred while fetching the VirusTotal result. Error details: $($_.Exception.Message)" | Out-File -FilePath $VirusTotalResultPath
     }
 }
 
