@@ -36,7 +36,7 @@ Write-Host "Installer information saved. Preparing sandbox configuration..."
     </MappedFolder>
   </MappedFolders>
   <LogonCommand>
-    <Command>C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File $SoftwareFolderPath\Script2-Install.ps1</Command>
+    <Command>C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File C:\SandboxTest\Script2-Install.ps1</Command>
   </LogonCommand>
 </Configuration>
 "@ | Set-Content -Path $SandboxConfigPath
