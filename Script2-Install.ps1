@@ -1,6 +1,6 @@
 # Paths
-$InstallerInfoPath = "C:\SandboxTest\InstallerInfo.json"
-$Script3Path = "C:\SandboxTest\Script3-Test.ps1"
+$InstallerInfoPath = "C:\SandboxTest\$SoftwareName\InstallerInfo.json"  # Update with software-specific folder
+$Script3Path = "C:\SandboxTest\$SoftwareName\Script3-Test.ps1"  # Update with software-specific folder
 
 # Validate InstallerInfo file
 if (-not (Test-Path $InstallerInfoPath)) {
