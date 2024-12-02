@@ -1,7 +1,14 @@
 # Paths and variables
 $ApplicationInstallerPath = Read-Host "Enter the full path to the application installer"
-$HashFilePath = "C:\SandboxTest\SoftwareHashes.txt"
-$SandboxConfigPath = "C:\SandboxTest\TestSandbox.wsb"
+$SoftwareName = [System.IO.Path]::GetFileNameWithoutExtension($ApplicationInstallerPath)  # Extract software name
+$SoftwareFolderPath = "C:\SandboxTest\$SoftwareName"
+$HashFilePath = "$SoftwareFolderPath\SoftwareHashes.txt"
+$SandboxConfigPath = "$SoftwareFolderPath\TestSandbox.wsb"
+
+# Create subfolder for software
+if (-not (Test-Path $SoftwareFolderPath)) {
+    New-Item -Path $SoftwareFolderPath -ItemType Directory
+}
 
 # Validate installer path
 if (-not (Test-Path $ApplicationInstallerPath)) {
@@ -14,7 +21,7 @@ $InstallerInfo = @{
     InstallerPath = $ApplicationInstallerPath
     HashFilePath  = $HashFilePath
 }
-$InstallerInfo | ConvertTo-Json | Set-Content -Path "C:\SandboxTest\InstallerInfo.json"
+$InstallerInfo | ConvertTo-Json | Set-Content -Path "$SoftwareFolderPath\InstallerInfo.json"
 
 Write-Host "Installer information saved. Preparing sandbox configuration..."
 
@@ -23,13 +30,13 @@ Write-Host "Installer information saved. Preparing sandbox configuration..."
 <Configuration>
   <MappedFolders>
     <MappedFolder>
-      <HostFolder>C:\SandboxTest</HostFolder>
-      <SandboxFolder>C:\SandboxTest</SandboxFolder>
+      <HostFolder>$SoftwareFolderPath</HostFolder>
+      <SandboxFolder>$SoftwareFolderPath</SandboxFolder>
       <ReadOnly>false</ReadOnly>
     </MappedFolder>
   </MappedFolders>
   <LogonCommand>
-    <Command>C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File C:\SandboxTest\Script2-Install.ps1</Command>
+    <Command>C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File $SoftwareFolderPath\Script2-Install.ps1</Command>
   </LogonCommand>
 </Configuration>
 "@ | Set-Content -Path $SandboxConfigPath
