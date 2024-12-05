@@ -90,7 +90,7 @@ Write-Host "Application installation completed."
 # Launch Script 3 for monitoring and hash collection
 if (Test-Path $Script3Path) {
     Write-Host "Launching monitoring and testing script..."
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File $Script3Path" -Wait
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File $Script3Path" -NoNewWindow -Wait
     Write-Host "Monitoring and testing script completed."
 } else {
     Write-Host "Monitoring script not found: $Script3Path" -ForegroundColor Red
