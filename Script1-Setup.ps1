@@ -1,3 +1,4 @@
+﻿clear
 # Paths and variables
 $ApplicationInstallerPath = Read-Host "Enter the full path to the application installer"
 $HashFilePath = "C:\SandboxTest\SoftwareHashes.txt"

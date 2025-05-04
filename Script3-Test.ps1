@@ -1,32 +1,68 @@
-# Variables
+﻿# Variables
 $InstallerInfoPath = "C:\SandboxTest\InstallerInfo.json"
-$VirusTotalAPIKey = "{YOUR API KEY HERE}"
+$VirusTotalAPIKey = "{YOURKEYHERE}"
 $VirusTotalResultPath = "C:\SandboxTest\VirusTotalCheck.txt"
 $HashOutputPath = "C:\SandboxTest\ApplicationHashes.txt"
 $MonitoringLogs = "C:\SandboxTest\Monitoring.txt"
-$filePath = "C:\SandboxTest\file.txt"
-$fileContent = "Application Testing Underway!"
+$Logo = "C:\SandboxTest\Personalisation\icon.jpg"
+$logFilePath = "C:\SandboxTest\logs.txt"
+$TestTime = "120" # The number of seconds that application should be tested for. Default: 2 Minutes (120 Seconds)
+
+# Confirm log file exists
+if (!(Test-Path $logFilePath))
+{
+   New-Item -path $logFilePath -type "file" -value "Test script started"
+   Write-Host "Created new file and beginning test"
+} else {
+  Clear-Content -Path $logFilePath
+  Add-Content -path $logFilePath -value "Test script started"
+  Write-Host "File already exists"
+}
+
+# Helper function for logging
+function Log-Message {
+    param (
+        [string]$Message
+    )
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    "$timestamp - $Message" | Out-File -FilePath $logFilePath -Append
+}
+
+# Start logging
+Log-Message "Script execution underway, logging started..."
+
+# Post a Toast Notification to advise that testing is starting
+Log-Message "Attempting to send toast notification."
+try {
+    New-BurntToastNotification -Text "Script started", "The testing script has started. Please allow time for the testing to complete..." -AppLogo $Logo -UniqueIdentifier 'AppTest002'
+    Log-Message "Toast notification sent successfully."
+} catch {
+    Log-Message "Error sending toast notification: $($_.Exception.Message)"
+}
+
+### START MAIN TESTING SCRIPT ###
 
 # Load Installer Info
 if (-not (Test-Path $InstallerInfoPath)) {
-    Write-Host "Installer info file not found: $InstallerInfoPath" -ForegroundColor Red
+    Log-Message "Install info file not found: $InstallerInfoPath"
     exit
 }
 
+Log-Message "Installer info file found - continuing..."
 $InstallerInfo = Get-Content -Path $InstallerInfoPath | ConvertFrom-Json
+
 
 # Determine newest installed application directory
 $InstalledPaths = @(
     "C:\Program Files",
-    "C:\Program Files (x86)",
-    "$env:APPDATA"
+    "C:\Program Files (x86)"
 )
 
 $NewestInstalledDir = $null
-$NewestInstallTime = Get-Date -Date "01/01/1970"
+$NewestInstallTime = Get-Date -Date "04/12/2024"
 
 foreach ($Path in $InstalledPaths) {
-    $Dirs = Get-ChildItem -Path $Path -Directory -ErrorAction SilentlyContinue
+    $Dirs = Get-ChildItem -Path $Path -Directory -Recurse -ErrorAction SilentlyContinue
     foreach ($Dir in $Dirs) {
         if ($Dir.LastWriteTime -gt $NewestInstallTime) {
             $NewestInstalledDir = $Dir.FullName
@@ -36,40 +72,48 @@ foreach ($Path in $InstalledPaths) {
 }
 
 if (-not $NewestInstalledDir) {
-    Write-Host "No installed application directories found." -ForegroundColor Red
+    Log-Message "Installed application directory not located. Exiting..."
     exit
 }
 
-Write-Host "Newest installed application directory: $NewestInstalledDir"
+Log-Message "Newest installed application directory: $NewestInstalledDir"
 
 # Locate primary executable in the directory
+Log-Message "Attempting to locate the primary executable" 
 $PrimaryExecutable = Get-ChildItem -Path $NewestInstalledDir -Recurse -Include *.exe -ErrorAction SilentlyContinue |
     Sort-Object -Property LastWriteTime -Descending |
     Select-Object -First 1
 
 if (-not $PrimaryExecutable) {
-    Write-Host "No executable files found in the application directory." -ForegroundColor Red
+    
+    Log-Message "No executable files found in the application directory."
     exit
 }
 
-Write-Host "Primary application executable: $($PrimaryExecutable.FullName)"
+Log-Message "Primary application executable located: $($PrimaryExecutable.FullName)"
 
-# Open Notepad with a message for the user (before launching Task Manager and application)
-Set-Content -Path $filePath -Value $fileContent
-Start-Process "notepad.exe" -ArgumentList $filePath
-Start-Sleep -Seconds 1 # Ensure notepad has time to open
+# Post a Toast Notification to advise that application testing is starting
+Log-Message "Attempting to send toast notification for Test Started."
+try {
+    New-BurntToastNotification -Text "Test Started", "Application testing has started. Please allow time for the testing to complete..." -AppLogo $Logo -UniqueIdentifier 'AppTest002'
+    Log-Message "Toast notification sent successfully."
+} catch {
+    Log-Message "Error sending toast notification: $($_.Exception.Message)"
+}
 
 # Open Task Manager
+Log-Message "Opening Task Manager"
 Start-Process -FilePath "taskmgr.exe"
 Start-Sleep -Seconds 2 # Give Task Manager a moment to open
 
 # Start application for testing
-Write-Host "Starting application for testing..."
+Log-Message "Starting application for testing..."
 $Process = Start-Process -FilePath $PrimaryExecutable.FullName -PassThru
-Start-Sleep -Seconds 10 # Allow application to run for 2 minutes
+Log-Message "Allowing $Time seconds for testing"
+Start-Sleep -Seconds $TestTime # Allow application to run for 2 minutes
 
 # Monitor Process (CPU, Memory, Threads)
-Write-Host "Monitoring application performance..."
+Log-Message "Monitoring application performance..."
 $MonitoringData = @{
     "StartTime" = $Process.StartTime
     "CPUUsage"  = $Process.CPU
@@ -79,18 +123,36 @@ $MonitoringData = @{
 }
 $MonitoringData | Out-File -FilePath $MonitoringLogs -Append
 
+# Post a Toast Notification to advise that testing is completed
+Log-Message "Attempting to send test completed notification."
+try {
+    New-BurntToastNotification -Text "Test Completed", "Testing has now completed, please wait whilst we collect the results of the software test and close applications." -AppLogo $Logo -UniqueIdentifier 'AppTest003'
+    Log-Message "Toast notification sent successfully."
+} catch {
+    Log-Message "Error sending toast notification: $($_.Exception.Message)"
+}
+
 # Stop application
-Write-Host "Stopping application after testing."
+Log-Message "Stopping application after testing."
 Stop-Process -Id $Process.Id -Force
 
-# Close Notepad
-Stop-Process -Name "notepad" -Force
-
 # Close Task Manager
+Log-Message "Closing Task Manager"
 Stop-Process -Name "taskmgr" -Force
 
 # Collect Hashes
+# Post a Toast Notification to advise that hash collection is starting
+
+Log-Message "Attempting to start hash collection."
+try {
+    New-BurntToastNotification -Text "File Hash Collection", "Please wait whilst we collect the file hashes for WDAC policy creation..." -AppLogo $Logo -UniqueIdentifier 'AppTest004'
+    Log-Message "Toast notification sent successfully."
+} catch {
+    Log-Message "Error sending toast notification: $($_.Exception.Message)"
+}
+
 # Scan the folder and subfolders to generate a comma-separated list of SHA1 hashes
+Log-Message "Hash scanning started"
 $hashes = Get-ChildItem -Path $NewestInstalledDir -Recurse -File |
 Where-Object { $_.Extension -in ".exe", ".dll", ".sys" } |
 ForEach-Object {
@@ -99,16 +161,28 @@ ForEach-Object {
 }
 
 # Combine the hashes into a comma-separated string
+Log-Message "Creating CSV string for hashes"
 $hashesString = $hashes -join ','
 
 # Write the hashes to the output file
 Set-Content -Path $HashOutputPath -Value $hashesString
-Write-Host "SHA1 hashes from '$folderPath' and all subfolders have been successfully exported as a comma-separated list." -ForegroundColor Green
+Log-Message "SHA1 hashes from '$folderPath' and all subfolders have been successfully exported as a comma-separated list."
 
 # VirusTotal File Upload - SHA1 Hash Upload
+# Post a Toast Notification to advise that VT Test is underway
+
+Log-Message "Attempting VirusTotal Upload."
+try {
+    New-BurntToastNotification -Text "VirusTotal", "Please wait whilst we check the install package against VirusTotal. You will see the outcome of this test in the Software Test folder." -AppLogo $Logo -UniqueIdentifier 'AppTest005'
+    Log-Message "Toast notification sent successfully."
+} catch {
+    Log-Message "Error sending toast notification: $($_.Exception.Message)"
+}
+
 # Load Installer Info
+Log-Message "Loadinging Installer Info for upload"
 if (-not (Test-Path $InstallerInfoPath)) {
-    Write-Host "Installer info file not found: $InstallerInfoPath" -ForegroundColor Red
+    Log-Message "Installer info file not found: $InstallerInfoPath" -ForegroundColor Red
     exit
 }
 
@@ -116,7 +190,7 @@ $InstallerInfo = Get-Content -Path $InstallerInfoPath | ConvertFrom-Json
 
 # Ensure the installer file exists
 if (-not (Test-Path $InstallerInfo.InstallerPath)) {
-    Write-Host "Installer file not found. Skipping VirusTotal scan." -ForegroundColor Yellow
+    Log-Message "Installer file not found. Skipping VirusTotal scan."
     # Write error to VirusTotal result path
     "ERROR: Installer file not found." | Out-File -FilePath $VirusTotalResultPath
 } else {
@@ -143,7 +217,7 @@ if (-not (Test-Path $InstallerInfo.InstallerPath)) {
             # Convert the response content to JSON and save it to the result path
             $responseContent | Out-File -FilePath $VirusTotalResultPath
         } else {
-            Write-Host "Error: $($response.StatusCode) - $($response.StatusDescription)" -ForegroundColor Red
+            Log-Message "Error: $($response.StatusCode) - $($response.StatusDescription)"
             "ERROR: An error occurred while fetching the VirusTotal result. Response: $($response.StatusCode) - $($response.StatusDescription)" | Out-File -FilePath $VirusTotalResultPath
         }
 
@@ -153,11 +227,21 @@ if (-not (Test-Path $InstallerInfo.InstallerPath)) {
     }
 }
 
-Write-Host "VirusTotal scan results saved to: $VirusTotalResultPath"
+Log-Message "VirusTotal scan results saved to: $VirusTotalResultPath"
+
+# Post a Toast Notification to advise that the script is complete
+Log-Message "Script Complete."
+try {
+    New-BurntToastNotification -Text "Testing Completed",  " All software testing and log collection has now completed. We will continue to close down the sandbox environment." -AppLogo $Logo -UniqueIdentifier 'AppTest006'
+    start-sleep 5
+    Log-Message "Toast notification sent successfully."
+} catch {
+    Log-Message "Error sending toast notification: $($_.Exception.Message)"
+}
 
 # Shut down Windows Sandbox after testing
-Write-Host "Shutting down Windows Sandbox..."
+Log-Message "Shutting down Windows Sandbox..."
 Stop-computer -computername localhost -Force
 cmd.exe /c "shutdown -s -t 0"
 
-Write-Host "Script 3 has finished execution and Windows Sandbox has been shut down."
+Log-Message "Script 3 has finished execution and Windows Sandbox has been shut down."
