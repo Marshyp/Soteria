@@ -418,11 +418,14 @@ Write-Host "Open index.html on the HOST (mapped Output folder on your desktop)."
 $runnerPath = Join-Path $assets "Sandbox-Runner.ps1"
 $runner | Out-File -FilePath $runnerPath -Encoding UTF8 -Force
 
+# Compute networking mode first
+$netMode = if ($EnableNetworking) { "Enable" } else { "Disable" }
+
 # --- Create the .wsb file ---
 $wsb = @"
 <Configuration>
   <VGpu>Enable</VGpu>
-  <Networking>$($EnableNetworking ? "Enable" : "Disable")</Networking>
+  <Networking>$netMode</Networking>
   <MappedFolders>
     <MappedFolder>
       <HostFolder>$assets</HostFolder>
