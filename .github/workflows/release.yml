@@ -17,7 +17,8 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Show repository structure
         shell: pwsh
@@ -36,12 +37,12 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build agent
+      - name: Build sandbox agent
         shell: pwsh
         run: |
           cargo build --manifest-path sandbox-agent\Cargo.toml --release
 
-      - name: Package agent
+      - name: Package sandbox agent
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
@@ -74,18 +75,19 @@ jobs:
           Write-Host "Using agent executable: $agentExe"
           Copy-Item $agentExe "dist\sandbox-agent.exe" -Force
 
-      - name: Upload agent to release
+      - name: Upload sandbox agent to release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/sandbox-agent.exe
 
   build-tauri-app:
-    name: Build Tauri App
+    name: Build Soteria App
     runs-on: windows-latest
     needs: build-sandbox-agent
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Show repository structure
         shell: pwsh
@@ -95,6 +97,9 @@ jobs:
 
           Write-Host "Repository root contents:"
           Get-ChildItem -Force | Select-Object Mode, Name
+
+          Write-Host "UI contents:"
+          Get-ChildItem ui -Force | Select-Object Mode, Name
 
           if (-not (Test-Path "ui\package.json")) {
             Write-Error "ui\package.json was not found."
@@ -128,18 +133,49 @@ jobs:
         working-directory: ui
         run: npm install
 
+      - name: Build frontend
+        working-directory: ui
+        shell: pwsh
+        run: |
+          npm run build
+
+          Write-Host "UI directory after npm run build:"
+          Get-ChildItem -Force | Select-Object Mode, Name
+
+          if (-not (Test-Path "dist")) {
+            Write-Host "package.json:"
+            Get-Content package.json
+
+            Write-Host "Searching for frontend build outputs:"
+            Get-ChildItem -Recurse -Directory | Select-Object FullName
+
+            Write-Error "ui\dist was not created. Vite build did not output the expected dist folder."
+            exit 1
+          }
+
+          Write-Host "ui\dist exists. Contents:"
+          Get-ChildItem dist -Recurse | Select-Object FullName
+
       - name: Install Tauri CLI
         shell: pwsh
         run: |
           cargo install tauri-cli --version "^2.0.0" --locked
 
-      - name: Build Tauri app
+      - name: Build Soteria app
         working-directory: src-tauri
         shell: pwsh
+        env:
+          TAURI_CONFIG: |
+            {
+              "build": {
+                "beforeBuildCommand": "",
+                "frontendDist": "../ui/dist"
+              }
+            }
         run: |
           cargo tauri build --verbose
 
-      - name: Package Tauri app
+      - name: Package Soteria app
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
@@ -203,7 +239,7 @@ jobs:
             Copy-Item $msi.FullName "dist\$($msi.Name)" -Force
           }
 
-      - name: Upload Tauri app to release
+      - name: Upload Soteria app to release
         uses: softprops/action-gh-release@v2
         with:
           files: |
