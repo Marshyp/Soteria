@@ -1,0 +1,65 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-sandbox-agent:
+    name: Build Sandbox Agent
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build agent
+        working-directory: sandbox-agent
+        run: cargo build --release
+
+      - name: Package agent
+        run: |
+          mkdir dist
+          copy sandbox-agent\target\release\sandbox-agent.exe dist\sandbox-agent.exe
+
+      - name: Upload agent to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/sandbox-agent.exe
+
+  build-tauri-app:
+    name: Build Tauri App
+    runs-on: windows-latest
+    needs: build-sandbox-agent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Sandbox Analyzer ${{ github.ref_name }}"
+          releaseBody: "Automated build for ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false
