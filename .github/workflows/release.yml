@@ -90,14 +90,48 @@ jobs:
         working-directory: ui
         run: npm install
 
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build frontend
+        working-directory: ui
+        run: npm run build
+
+      - name: Build Tauri host app
+        working-directory: src-tauri
+        run: cargo build --release
+
+      - name: Package Tauri app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+
+          Write-Host "Searching for Tauri executable..."
+          Get-ChildItem -Recurse -Filter "*.exe" | Select-Object FullName
+
+          $hostExe = Get-ChildItem -Recurse -Filter "*.exe" |
+            Where-Object {
+              $_.FullName -like "*target*release*" -and
+              $_.Name -notlike "build-script-*"
+            } |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $hostExe) {
+            Write-Error "No suitable Tauri host executable was found."
+            exit 1
+          }
+
+          Write-Host "Using Tauri host executable: $hostExe"
+          Copy-Item $hostExe "dist\Sandbox-Analyzer-${{ github.ref_name }}.exe" -Force
+
+          if (Test-Path "target\release\bundle") {
+            Copy-Item "target\release\bundle" "dist\bundle" -Recurse -Force
+          }
+
+          if (Test-Path "src-tauri\target\release\bundle") {
+            Copy-Item "src-tauri\target\release\bundle" "dist\bundle" -Recurse -Force
+          }
+
+      - name: Upload Tauri app to release
+        uses: softprops/action-gh-release@v2
         with:
-          projectPath: ui
-          tagName: ${{ github.ref_name }}
-          releaseName: "Sandbox Analyzer ${{ github.ref_name }}"
-          releaseBody: "Automated build for ${{ github.ref_name }}"
-          releaseDraft: false
-          prerelease: false
+          files: |
+            dist/Sandbox-Analyzer-${{ github.ref_name }}.exe
+            dist/bundle/**/*
