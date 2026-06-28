@@ -17,12 +17,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Show repository structure
+        shell: pwsh
+        run: |
+          Write-Host "Current directory:"
+          Get-Location
+
+          Write-Host "Repository root contents:"
+          Get-ChildItem -Force | Select-Object Mode, Name
+
+          if (-not (Test-Path "sandbox-agent\Cargo.toml")) {
+            Write-Error "sandbox-agent\Cargo.toml was not found. The tag being built likely does not contain the latest project files."
+            exit 1
+          }
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build agent
-        working-directory: sandbox-agent
-        run: cargo build --release
+        shell: pwsh
+        run: |
+          cargo build --manifest-path sandbox-agent\Cargo.toml --release
 
       - name: Package agent
         shell: pwsh
@@ -37,6 +52,7 @@ jobs:
           $agentExe = $null
 
           foreach ($path in $candidatePaths) {
+            Write-Host "Checking $path"
             if (Test-Path $path) {
               $agentExe = $path
               break
@@ -44,21 +60,11 @@ jobs:
           }
 
           if (-not $agentExe) {
-            Write-Host "Could not find sandbox-agent.exe in the expected paths."
-            Write-Host "Searching for built executables..."
-
+            Write-Host "Could not find sandbox-agent.exe in expected paths."
+            Write-Host "Searching for executables:"
             Get-ChildItem -Recurse -Filter "*.exe" | Select-Object FullName
 
-            $agentExe = Get-ChildItem -Recurse -Filter "*.exe" |
-              Where-Object {
-                $_.FullName -like "*target*release*" -and
-                $_.Name -notlike "build-script-*"
-              } |
-              Select-Object -First 1 -ExpandProperty FullName
-          }
-
-          if (-not $agentExe) {
-            Write-Error "No suitable built agent executable was found."
+            Write-Error "No suitable sandbox-agent.exe was found."
             exit 1
           }
 
@@ -78,6 +84,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Show repository structure
+        shell: pwsh
+        run: |
+          Write-Host "Current directory:"
+          Get-Location
+
+          Write-Host "Repository root contents:"
+          Get-ChildItem -Force | Select-Object Mode, Name
+
+          if (-not (Test-Path "ui\package.json")) {
+            Write-Error "ui\package.json was not found."
+            exit 1
+          }
+
+          if (-not (Test-Path "src-tauri\Cargo.toml")) {
+            Write-Error "src-tauri\Cargo.toml was not found."
+            exit 1
+          }
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -95,23 +120,44 @@ jobs:
         run: npm run build
 
       - name: Build Tauri host app
-        working-directory: src-tauri
-        run: cargo build --release
+        shell: pwsh
+        run: |
+          cargo build --manifest-path src-tauri\Cargo.toml --release
 
       - name: Package Tauri app
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
 
-          Write-Host "Searching for Tauri executable..."
-          Get-ChildItem -Recurse -Filter "*.exe" | Select-Object FullName
+          $candidatePaths = @(
+            "target\release\sandbox-analyzer.exe",
+            "target\release\soteria.exe",
+            "src-tauri\target\release\sandbox-analyzer.exe",
+            "src-tauri\target\release\soteria.exe"
+          )
 
-          $hostExe = Get-ChildItem -Recurse -Filter "*.exe" |
-            Where-Object {
-              $_.FullName -like "*target*release*" -and
-              $_.Name -notlike "build-script-*"
-            } |
-            Select-Object -First 1 -ExpandProperty FullName
+          $hostExe = $null
+
+          foreach ($path in $candidatePaths) {
+            Write-Host "Checking $path"
+            if (Test-Path $path) {
+              $hostExe = $path
+              break
+            }
+          }
+
+          if (-not $hostExe) {
+            Write-Host "Could not find host app exe in expected paths."
+            Write-Host "Searching for executables:"
+            Get-ChildItem -Recurse -Filter "*.exe" | Select-Object FullName
+
+            $hostExe = Get-ChildItem -Recurse -Filter "*.exe" |
+              Where-Object {
+                $_.FullName -like "*target*release*" -and
+                $_.Name -notlike "build-script-*"
+              } |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
 
           if (-not $hostExe) {
             Write-Error "No suitable Tauri host executable was found."
@@ -121,17 +167,7 @@ jobs:
           Write-Host "Using Tauri host executable: $hostExe"
           Copy-Item $hostExe "dist\Sandbox-Analyzer-${{ github.ref_name }}.exe" -Force
 
-          if (Test-Path "target\release\bundle") {
-            Copy-Item "target\release\bundle" "dist\bundle" -Recurse -Force
-          }
-
-          if (Test-Path "src-tauri\target\release\bundle") {
-            Copy-Item "src-tauri\target\release\bundle" "dist\bundle" -Recurse -Force
-          }
-
       - name: Upload Tauri app to release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/Sandbox-Analyzer-${{ github.ref_name }}.exe
-            dist/bundle/**/*
+          files: dist/Sandbox-Analyzer-${{ github.ref_name }}.exe
