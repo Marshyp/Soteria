@@ -6,6 +6,8 @@ on:
       - "v*.*.*"
       - "V*.*.*"
 
+  workflow_dispatch:
+
 permissions:
   contents: write
 
@@ -27,7 +29,7 @@ jobs:
           Get-ChildItem -Force | Select-Object Mode, Name
 
           if (-not (Test-Path "sandbox-agent\Cargo.toml")) {
-            Write-Error "sandbox-agent\Cargo.toml was not found. The tag being built likely does not contain the latest project files."
+            Write-Error "sandbox-agent\Cargo.toml was not found."
             exit 1
           }
 
@@ -53,6 +55,7 @@ jobs:
 
           foreach ($path in $candidatePaths) {
             Write-Host "Checking $path"
+
             if (Test-Path $path) {
               $agentExe = $path
               break
@@ -103,6 +106,16 @@ jobs:
             exit 1
           }
 
+          if (-not (Test-Path "src-tauri\tauri.conf.json")) {
+            Write-Error "src-tauri\tauri.conf.json was not found."
+            exit 1
+          }
+
+          if (-not (Test-Path "src-tauri\icons\icon.ico")) {
+            Write-Error "src-tauri\icons\icon.ico was not found. Add your Soteria icon at src-tauri/icons/icon.ico."
+            exit 1
+          }
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -115,31 +128,41 @@ jobs:
         working-directory: ui
         run: npm install
 
-      - name: Build frontend
-        working-directory: ui
-        run: npm run build
-
-      - name: Build Tauri host app
+      - name: Install Tauri CLI
         shell: pwsh
         run: |
-          cargo build --manifest-path src-tauri\Cargo.toml --release
+          cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Build Tauri app
+        working-directory: src-tauri
+        shell: pwsh
+        run: |
+          cargo tauri build --verbose
 
       - name: Package Tauri app
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
 
+          Write-Host "Searching for generated executables:"
+          Get-ChildItem -Recurse -Filter "*.exe" | Select-Object FullName
+
           $candidatePaths = @(
+            "target\release\sandbox-analyzer-host.exe",
             "target\release\sandbox-analyzer.exe",
             "target\release\soteria.exe",
+            "target\release\Soteria.exe",
+            "src-tauri\target\release\sandbox-analyzer-host.exe",
             "src-tauri\target\release\sandbox-analyzer.exe",
-            "src-tauri\target\release\soteria.exe"
+            "src-tauri\target\release\soteria.exe",
+            "src-tauri\target\release\Soteria.exe"
           )
 
           $hostExe = $null
 
           foreach ($path in $candidatePaths) {
             Write-Host "Checking $path"
+
             if (Test-Path $path) {
               $hostExe = $path
               break
@@ -148,26 +171,41 @@ jobs:
 
           if (-not $hostExe) {
             Write-Host "Could not find host app exe in expected paths."
-            Write-Host "Searching for executables:"
-            Get-ChildItem -Recurse -Filter "*.exe" | Select-Object FullName
+            Write-Host "Searching release folders:"
 
             $hostExe = Get-ChildItem -Recurse -Filter "*.exe" |
               Where-Object {
                 $_.FullName -like "*target*release*" -and
-                $_.Name -notlike "build-script-*"
+                $_.FullName -notlike "*build-script*" -and
+                $_.FullName -notlike "*deps*" -and
+                $_.Name -ne "sandbox-agent.exe"
               } |
               Select-Object -First 1 -ExpandProperty FullName
           }
 
           if (-not $hostExe) {
-            Write-Error "No suitable Tauri host executable was found."
+            Write-Error "No suitable Soteria host executable was found."
             exit 1
           }
 
-          Write-Host "Using Tauri host executable: $hostExe"
-          Copy-Item $hostExe "dist\Sandbox-Analyzer-${{ github.ref_name }}.exe" -Force
+          Write-Host "Using Soteria host executable: $hostExe"
+          Copy-Item $hostExe "dist\Soteria-${{ github.ref_name }}.exe" -Force
+
+          Write-Host "Searching for MSI installers:"
+          Get-ChildItem -Recurse -Filter "*.msi" | Select-Object FullName
+
+          $msiFiles = Get-ChildItem -Recurse -Filter "*.msi" |
+            Where-Object {
+              $_.FullName -like "*target*release*bundle*"
+            }
+
+          foreach ($msi in $msiFiles) {
+            Copy-Item $msi.FullName "dist\$($msi.Name)" -Force
+          }
 
       - name: Upload Tauri app to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Sandbox-Analyzer-${{ github.ref_name }}.exe
+          files: |
+            dist/Soteria-${{ github.ref_name }}.exe
+            dist/*.msi
