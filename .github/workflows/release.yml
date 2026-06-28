@@ -46,6 +46,7 @@ jobs:
           if (-not $agentExe) {
             Write-Host "Could not find sandbox-agent.exe in the expected paths."
             Write-Host "Searching for built executables..."
+
             Get-ChildItem -Recurse -Filter "*.exe" | Select-Object FullName
 
             $agentExe = Get-ChildItem -Recurse -Filter "*.exe" |
@@ -84,16 +85,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install frontend dependencies
-        run: npm ci
+        working-directory: ui
+        run: npm install
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: ui
           tagName: ${{ github.ref_name }}
           releaseName: "Sandbox Analyzer ${{ github.ref_name }}"
           releaseBody: "Automated build for ${{ github.ref_name }}"
